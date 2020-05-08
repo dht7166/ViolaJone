@@ -180,25 +180,54 @@ class ViolaJone:
         for alpha,feature,P,thres in self.chosen:
             sum_pred+=alpha*(1 if P*compute_feature_using_integral(X,feature)<P*thres else 0)
             baseline+=alpha/2
-        return 1 if sum_pred>baseline else 0
+        return sum_pred - baseline
+
+
+    def get_sliding_window(self,img):
+        sliding_window = []
+        img = cv2.resize(img,(200,200))
+        for window_size in [100,50,20]:
+            x = 0
+            y = 0
+            while x+window_size<200 and y+window_size<200:
+                sliding_window.append( (np.copy(img[x:(x+window_size),y:(y+window_size)]),
+                                        x,y,window_size) )
+                x +=int(window_size/5)
+                y +=int(window_size/5)
+        return sliding_window
+
+    def detect(self,img):
+        coord = []
+        for patch,x,y,window_size in self.get_sliding_window(img):
+            pred = self.predict(patch)
+            if pred >0:
+                coord.append((pred,(x,y) ,(x+window_size,y+window_size) ))
+        coord.sort(key=lambda x: x[0])
+        coord.reverse()
+        ret = [(x[1],x[2]) for x in coord[:5]]
+        return ret
+
 
 
 
 
 if __name__ == '__main__':
 
+    img_size = 17
+    num_feature = 100
+
     # Reading the dataset
     print("READING THE DATASET")
     list_file = glob.glob('FDDB-folds/*-ellipseList.txt')
     face = []
     non_face = []
-    for fold in list_file[:5]:
+    for fold in list_file[:6]:
         print(fold)
         ll = read_file(fold)
-        a, b = create_face_dataset(ll)
+        a, b = create_face_dataset(ll,img_size)
         face.extend(a)
         non_face.extend(b)
-    X = np.zeros((len(face)+len(non_face),15,15))
+    X = np.zeros((len(face)+len(non_face),img_size,img_size))
     Y = np.zeros((len(face)+len(non_face)))
     print("PREPARING THE INTEGRAL IMAGES")
     for i in range(len(face)):
@@ -214,7 +243,8 @@ if __name__ == '__main__':
 
 
     # Init the model
-    vl = ViolaJone(15,50)
+
+    vl = ViolaJone(img_size,num_feature)
     # Prepare the data for training
     try:
         feature_matrix = np.load('feature_matrix.npy')
@@ -229,11 +259,11 @@ if __name__ == '__main__':
         feature_mask = np.load('prelim_feature_mask.npy')
         X = X[:,feature_mask]
     except:
-        feature_mask, X = vl.prelim_feature_selection_sklearn(X, Y,1000)
+        feature_mask, X = vl.prelim_feature_selection_sklearn(X, Y,5000)
         np.save('prelim_feature_mask.npy', feature_mask)
 
     print('prelim feature selection',X.shape)
     vl.choose_feature_w_mask(feature_mask)
     print("Training the viola jones model")
     vl.fit(X,Y)
-    vl.save('violajones5fold.pkl')
+    vl.save('violajones6fold.pkl')

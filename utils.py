@@ -62,6 +62,7 @@ def compute_feature_using_integral(S,feature):
     :return:
     """
     def calc(S,region):
+        S = S.astype(int)
         t,l = region[0]
         b,r = region[1]
         if t>0 and l >0:
@@ -91,7 +92,7 @@ def read_file(name):
     return all_coord
 
 
-def create_face_dataset(all_coord):
+def create_face_dataset(all_coord,img_size):
     X = [] # face
     Y = [] # non-face
     for img_name,list_coord in all_coord:
@@ -101,16 +102,17 @@ def create_face_dataset(all_coord):
             axes,center,angle = coord
             tl,br = convert_ellipse_to_rect(axes,center,angle)
             crop =np.copy(img[tl[1]:br[1],tl[0]:br[0]])
-            crop = cv2.resize(crop,(15,15))
+            crop = cv2.resize(crop,(img_size,img_size))
             X.append(crop)
         for coord in list_coord:  # Remove the faces
             axes,center,angle = coord
             tl,br = convert_ellipse_to_rect(axes,center,angle)
             img[tl[1]:br[1], tl[0]:br[0]] = 0
 
-        img = cv2.resize(img,(30,30)) # Add 2 images to non-face, which is surely non face
-        Y.append(img[0:15,0:15])
-        Y.append(img[15:30, 0:15])
+        img = cv2.resize(img,(2*img_size,2*img_size)) # Add 2 images to non-face, which is surely non face
+        display(img)
+        Y.append(img[0:img_size,0:img_size])
+        Y.append(img[img_size:2*img_size, 0:img_size])
     return X,Y
 
 if __name__ == '__main__':
