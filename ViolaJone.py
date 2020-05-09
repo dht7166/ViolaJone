@@ -20,15 +20,17 @@ class AdaBoost:
         """
         # X is a vector of images for some feature
         # This function is to train the weak classifier
-        # By learning the threshold and parity (which is for the sign)
+        # by learning the threshold and parity (which is for the sign)
         E = 999999999
         P = 1
         thres = None
+
         # Start by sorting
         ordering = np.argsort(X)
         X = X[ordering]
         Y = Y[ordering]
         W = W[ordering]
+
         # Calculate Tp and Tn
         Tp = 0
         Tn = 0
@@ -44,7 +46,7 @@ class AdaBoost:
         for i in range(X.shape[0]):
             below_as_neg = Sp + (Tn-Sn)
             below_as_pos = Sn + (Tp-Sp)
-            if E>below_as_pos:
+            if E > below_as_pos:
                 E = below_as_pos
                 P = 1
                 thres = X[i]
