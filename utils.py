@@ -110,7 +110,6 @@ def create_face_dataset(all_coord,img_size):
             img[tl[1]:br[1], tl[0]:br[0]] = 0
 
         img = cv2.resize(img,(2*img_size,2*img_size)) # Add 2 images to non-face, which is surely non face
-        display(img)
         Y.append(img[0:img_size,0:img_size])
         Y.append(img[img_size:2*img_size, 0:img_size])
     return X,Y

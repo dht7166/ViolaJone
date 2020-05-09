@@ -23,19 +23,19 @@ def test_overall_acc(img_size):
         X[i + len(face)] = non_face[i]
         Y[i + len(face)] = 0
     print('Face {} vs Non-face {}'.format(np.count_nonzero(Y == 1), np.count_nonzero(Y == 0)))
-    model = ViolaJone(img_size, 10)
-    model.load('violajones6fold.pkl')
+    model = ViolaJone(img_size)
+    model.load()
     pred = np.zeros(Y.shape)
     for i in range(X.shape[0]):
-        pred[i] = model.predict(X[i])>0
+        pred[i] =1 if  model.predict(X[i])>0 else 0
 
     print(f1_score(Y, pred))
     print(np.sum(pred == Y) / X.shape[0])
 
 def demo_predict(img_size):
     list_file = glob.glob('FDDB-folds/*-ellipseList.txt')
-    model = ViolaJone(img_size, 10)
-    model.load('violajones6fold.pkl')
+    model = ViolaJone(img_size)
+    model.load()
     for fold in list_file[6:]:
         all_coord = read_file(fold)
         for img_name, list_coord in all_coord:
@@ -49,18 +49,19 @@ def demo_predict(img_size):
 
 def demo_detect():
     list_img = glob.glob('originalPics/2002/07/19/big/*.jpg')
-    model = ViolaJone(15, 10)
-    model.load('violajones5fold.pkl')
+    model = ViolaJone(15)
+    model.load()
     for image in list_img:
         img = read(image)
         coord = model.detect(img)
-        img = cv2.resize(img,(200,200))
+        color = cv2.imread(image)
+        color = cv2.resize(color,(200,200))
         for tl,br in coord:
-            cv2.rectangle(img,tl,br,(0, 0, 255))
-        display(img)
+            cv2.rectangle(color,tl,br,(0, 0, 255))
+        display(color)
 
 
 if __name__=='__main__':
-    # test_overall_acc(17)
+    test_overall_acc(17)
     # demo_predict(17)
-    demo_detect()
+    # demo_detect()

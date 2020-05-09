@@ -7,7 +7,8 @@ from sklearn.feature_selection import VarianceThreshold, SelectKBest
 import pickle
 
 class AdaBoost:
-    def __init__(self):
+    def __init__(self,num_feature = None):
+        self.T = num_feature
         self.weak_clf = []
 
     def weak_learner(self,X,Y,W):
@@ -58,7 +59,7 @@ class AdaBoost:
 
         return E,P,thres
 
-    def fit(self,X,Y):
+    def fit(self,X,Y,haar_feature):
         """
         :param X: the images x feature matrix
         :param Y: the true label
@@ -83,11 +84,11 @@ class AdaBoost:
             # select the best weak classifier
             best_E = 999999999
             best_weak_classifier = None
-            for i in range(len(self.feature)):
+            for i in range(len(haar_feature)):
                 E,P,thres = self.weak_learner(X[:,i],Y,W)
                 if best_E>E:
                     best_E = E
-                    best_weak_classifier = (i,self.feature[i],P,thres)
+                    best_weak_classifier = (i,haar_feature[i],P,thres)
 
             # Now we have best_weak_classifier
             Beta = best_E/(1-best_E)
@@ -111,6 +112,7 @@ class AdaBoost:
     def load(self,name):
         with open(name,'rb') as f:
             self.weak_clf = pickle.load(f)
+        self.T = len(self.weak_clf)
 
     def predict(self,X):
         # of course X is a integral image
@@ -185,7 +187,7 @@ class ViolaJone:
     def fit(self,X,Y):
         # We are assuming that compute feature is called by the user
         # For now, add only one layer
-        ada = AdaBoost()
+        ada = AdaBoost(50)
         ada.fit(X,Y)
         ada.save('adaboost/save_{}.pkl'.format(len(self.layer)))
         self.layer.append(ada)
@@ -193,7 +195,11 @@ class ViolaJone:
 
     def load(self):
         list_ada = glob.glob('adaboost/save_*.pkl')
-        self.layer = [AdaBoost().load(saved) for saved in list_ada]
+        self.layer = []
+        for saved in list_ada:
+            ada = AdaBoost()
+            ada.load(saved)
+            self.layer.append(ada)
 
     def save(self):
         for i,ada in enumerate(self.layer):
@@ -237,7 +243,7 @@ class ViolaJone:
 if __name__ == '__main__':
 
     img_size = 17
-    num_feature = 100
+
 
     # Reading the dataset
     print("READING THE DATASET")
@@ -267,7 +273,7 @@ if __name__ == '__main__':
 
     # Init the model
 
-    vl = ViolaJone(img_size,num_feature)
+    vl = ViolaJone(img_size)
     # Prepare the data for training
     try:
         feature_matrix = np.load('feature_matrix.npy')
