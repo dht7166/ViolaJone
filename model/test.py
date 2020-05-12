@@ -48,8 +48,8 @@ def demo_predict(img_size):
                 print(model.predict(cv2.resize(crop, (img_size, img_size ))))
 
 def demo_detect():
-    list_img = glob.glob('originalPics/2002/07/19/big/*.jpg')
-    model = ViolaJone(15)
+    list_img = glob.glob('../data/originalPics/2002/07/19/big/*.jpg')
+    model = ViolaJone(17)
     model.load()
     for image in list_img:
         img = read(image)
@@ -62,6 +62,6 @@ def demo_detect():
 
 
 if __name__=='__main__':
-    test_overall_acc(17)
+    #test_overall_acc(17)
     # demo_predict(17)
-    # demo_detect()
+    demo_detect()

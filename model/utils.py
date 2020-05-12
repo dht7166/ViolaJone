@@ -44,7 +44,7 @@ def resize(img,elip_coord,W,H):
     center,axes,angle = elip_coord
     axes = (int(axes[0] * W /oW), int(axes[1] * H /oH))
     center = (int(center[0] * W /oW), int(center[1] * H /oH))
-    img =cv2.resize(img,(W,H))
+    img = cv2.resize(img,(W,H))
     return img,(axes,center,angle)
 
 
@@ -65,13 +65,13 @@ def compute_feature_using_integral(S,feature):
         S = S.astype(int)
         t,l = region[0]
         b,r = region[1]
-        if t>0 and l >0:
+        if t > 0 and l > 0:
             return S[b,r]-S[t-1,r]-S[b,l-1]+S[t-1,l-1]
-        if t == 0 and l >0:
+        if t == 0 and l > 0:
             return S[b,r]-S[b,l-1]
-        if t>0 and l == 0:
+        if t > 0 and l == 0:
             return S[b,r] - S[t-1,r]
-        if t==0 and l ==0:
+        if t == 0 and l == 0:
             return S[b][r]
     pos,neg = feature
     rpos = sum([calc(S,region) for region in pos])
