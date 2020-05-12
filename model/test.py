@@ -1,7 +1,7 @@
 from utils import *
 from ViolaJone import ViolaJone
 import glob
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score , confusion_matrix
 
 
 def test_overall_acc(img_size):
@@ -24,13 +24,15 @@ def test_overall_acc(img_size):
         Y[i + len(face)] = 0
     print('Face {} vs Non-face {}'.format(np.count_nonzero(Y == 1), np.count_nonzero(Y == 0)))
     model = ViolaJone(img_size)
-    model.load()
+    model.load('trained_20')
     pred = np.zeros(Y.shape)
     for i in range(X.shape[0]):
         pred[i] =1 if  model.predict(X[i])>0 else 0
 
     print(f1_score(Y, pred))
     print(np.sum(pred == Y) / X.shape[0])
+    tn, fp, fn, tp = confusion_matrix(Y,pred).ravel()
+    print(tn,fp,fn,tp)
 
 def demo_predict(img_size):
     list_file = glob.glob('FDDB-folds/*-ellipseList.txt')
@@ -48,9 +50,11 @@ def demo_predict(img_size):
                 print(model.predict(cv2.resize(crop, (img_size, img_size ))))
 
 def demo_detect():
-    list_img = glob.glob('../data/originalPics/2002/07/19/big/*.jpg')
+    list_img = glob.glob('test_images/*.jpg')
     model = ViolaJone(17)
-    model.load()
+    model.load('trained_10')
+    for feature in model.layer[0].weak_clf:
+        print(feature)
     for image in list_img:
         img = read(image)
         coord = model.detect(img)
@@ -62,6 +66,6 @@ def demo_detect():
 
 
 if __name__=='__main__':
-    #test_overall_acc(17)
+    test_overall_acc(17)
     # demo_predict(17)
-    demo_detect()
+    # demo_detect()

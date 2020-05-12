@@ -5,13 +5,14 @@ import glob
 from tqdm import tqdm
 from sklearn.feature_selection import VarianceThreshold, SelectKBest
 import pickle
+import os
 
 class AdaBoost:
     def __init__(self,num_feature = None):
         self.T = num_feature
         self.weak_clf = []
 
-    def weak_learner(self,X,Y,W):
+    def weak_learner(self, X, Y, W):
         """
         :param X: The computed values for some features
         :param Y: The true label
@@ -35,7 +36,7 @@ class AdaBoost:
         Tp = 0
         Tn = 0
         for i in range(X.shape[0]):
-            if Y[i] == 0:
+            if Y[i]==0:
                 Tn+=W[i]
             else:
                 Tp+=W[i]
@@ -44,8 +45,8 @@ class AdaBoost:
         Sp = 0
         Sn = 0
         for i in range(X.shape[0]):
-            below_as_neg = Sp + (Tn - Sn)
-            below_as_pos = Sn + (Tp - Sp)
+            below_as_neg = Sp + (Tn-Sn)
+            below_as_pos = Sn + (Tp-Sp)
             if E > below_as_pos:
                 E = below_as_pos
                 P = 1
@@ -59,18 +60,19 @@ class AdaBoost:
             else:
                 Sp += W[i]
 
-        return E, P, thres
+        return E,P,thres
 
     def fit(self,X,Y,haar_feature):
         """
         :param X: the images x feature matrix
         :param Y: the true label
+        :param haar_feature: The haar feature given by viola jones
         :return: None, all the weak classifier will be in self.chosen
         """
 
         # Initialize W
-        num_pos = np.count_nonzero(Y==1)
-        num_neg = np.count_nonzero(Y==0)
+        num_pos = np.count_nonzero(Y == 1)
+        num_neg = np.count_nonzero(Y == 0)
         W = np.zeros(Y.shape)
         for i in range(Y.shape[0]):
             if Y[i] ==0:
@@ -78,52 +80,50 @@ class AdaBoost:
             else:
                 W[i] = 1/(2*num_pos)
 
-        for num_classifier in range(self.T): # Choose only T weak classifier
+        for num_classifier in range(self.T):  # Choose only T weak classifier
             print("CHOOSING THE {}/{} WEAK CLASSIFIER".format(num_classifier+1,self.T),flush=True)
             # normalize weight
-            W = np.divide(W, np.sum(W))
+            W = W/np.sum(W)
 
             # select the best weak classifier
             best_E = 999999999
             best_weak_classifier = None
-            for i in range(len(haar_feature)):
+            for i in tqdm(range(len(haar_feature))):
                 E,P,thres = self.weak_learner(X[:,i],Y,W)
-                if best_E > E:
+                if best_E>E:
                     best_E = E
                     best_weak_classifier = (i,haar_feature[i],P,thres)
 
             # Now we have best_weak_classifier
             Beta = best_E/(1-best_E)
             alpha = np.log(1/Beta)
-            i, feature, P, thres = best_weak_classifier
-            self.weak_clf.append((alpha,feature,P,thres))
-            print("CHOSE WEAK CLASSIFIER {} with best error {:.3f} and weight {:.3f}".format(i,best_E,alpha))
-            print("ADJUSTING WEIGHT")
+            j, feature, P, thres = best_weak_classifier
+            self.weak_clf.append((alpha, feature, P, thres))
+            print("CHOSE WEAK CLASSIFIER {} with best error {:.3f} and weight {:.3f}".
+                  format(j, best_E, alpha))
             # now we adjust the W
             for i in range(Y.shape[0]):
-                j, feature, P, thres = best_weak_classifier
-                pred = 1 if P*X[i,j] < P*thres else 0
+                pred = 1 if P*X[i,j]<P*thres else 0
                 e = 0 if pred == Y[i] else 1
                 W[i] = W[i]*Beta**(1-e)
 
-
-    def save(self,name):
-        with open(name,'wb') as f:
+    def save(self, name):
+        with open(name, 'wb') as f:
             pickle.dump(self.weak_clf,f)
 
-    def load(self,name):
+    def load(self, name):
         with open(name,'rb') as f:
             self.weak_clf = pickle.load(f)
         self.T = len(self.weak_clf)
 
-    def predict(self,X):
+    def predict(self, X):
         # of course X is a integral image
         sum_pred = 0
         baseline = 0
-        for alpha,feature,P,thres in self.weak_clf:
-            sum_pred+=alpha*(1 if P*compute_feature_using_integral(X,feature)<P*thres else 0)
-            baseline+=alpha/2
-        return 1 if sum_pred>baseline else 0
+        for alpha, feature, P, thres in self.weak_clf:
+            sum_pred += alpha*(1 if P*compute_feature_using_integral(X,feature)<P*thres else 0)
+            baseline += alpha/2
+        return sum_pred-baseline
 
 
 class ViolaJone:
@@ -139,33 +139,28 @@ class ViolaJone:
         for x,y in list_coord:
             for h in range(1,self.size):
                 for w in range(1,self.size):
-                    if x+h >= self.size or y+w >= self.size:
+                    if x+h >=self.size or y+w>=self.size:
                         continue
                     current = ((x,y),(x+h,y+w))
-
-                    # 2 rectangle feature
-                    if x+2*h < self.size:
-                        down = ((x+h,y),(x+2*h,y+w))
+                    if x+2*h+1<self.size:
+                        down = ((x+h+1,y),(x+2*h+1,y+w))
                         self.feature.append(([current],[down]))
                         self.feature.append(([down],[current]))
-                    if y+2*w < self.size:
-                        right = ((x,y+w),(x+h,y+2*w))
+                    if y+2*w+1<self.size:
+                        right = ((x,y+w+1),(x+h,y+2*w+1))
                         self.feature.append(([current],[right]))
                         self.feature.append(([right],[current]))
 
-                    # 3 rectangle feature
-                    if x+3*h < self.size:
-                        downdown = ((x+2*h,y),(x+3*h,y+w))
+                    if x+3*h+2<self.size:
+                        downdown = ((x+2*h+2,y),(x+3*h+2,y+w))
                         self.feature.append(([current,downdown],[down]))
                         self.feature.append(([down],[current,downdown]))
-                    if y+3*w < self.size:
-                        rightright = ((x,y+2*w),(x+h,y+3*w))
+                    if y+3*w+2<self.size:
+                        rightright = ((x,y+2*w+2),(x+h,y+3*w+2))
                         self.feature.append(([current, rightright], [right]))
                         self.feature.append(([right], [current, rightright]))
-
-                    # 4 rectangle feature
-                    if x+2*h < self.size and y+2*w < self.size:
-                        downright = ((x+h,y+w),(x+2*h,y+2*w))
+                    if x+2*h+1<self.size and y+2*w+1<self.size:
+                        downright = ((x+h+1,y+w+1),(x+2*h+1,y+2*w+1))
                         self.feature.append(([current,downright],[right,down] ))
                         self.feature.append(([right,down],[current,downright]))
 
@@ -175,7 +170,7 @@ class ViolaJone:
             feature = self.feature[i]
             for j in range(X.shape[0]):
                 integral_img = X[j]
-                ret[i,j] = compute_feature_using_integral(integral_img,feature)
+                ret[i,j] =compute_feature_using_integral(integral_img,feature)
         return ret.transpose() # return a image x features matrix
 
     def prelim_feature_selection_sklearn(self,X,Y,k = 500):
@@ -194,53 +189,58 @@ class ViolaJone:
     def fit(self,X,Y):
         # We are assuming that compute feature is called by the user
         # For now, add only one layer
-        ada = AdaBoost(50)
-        ada.fit(X,Y)
-        ada.save('adaboost/save_{}.pkl'.format(len(self.layer)))
+        ada = AdaBoost(20)
+        ada.fit(X,Y,self.feature)
         self.layer.append(ada)
 
 
-    def load(self):
-        list_ada = glob.glob('adaboost/save_*.pkl')
+    def load(self,name):
+        list_ada = glob.glob(name+'/save_*.pkl')
         self.layer = []
         for saved in list_ada:
             ada = AdaBoost()
             ada.load(saved)
             self.layer.append(ada)
 
-    def save(self):
+    def save(self,name):
+        os.makedirs(name,exist_ok=True)
         for i,ada in enumerate(self.layer):
-            ada.save('adaboost/save_{}.pkl'.format(i))
+            ada.save(name+'/save_{}.pkl'.format(i))
 
     def predict(self,X): # X has to be a proper resized image
         X = compute_integral_image(X)
+        sum = 0
         for ada in self.layer:
-            if ada.predict(X)==0:
+            pred = ada.predict(X)
+            if pred<=0:
                 return 0
-        return 1
+            sum+=pred
+        return sum
 
     def get_sliding_window(self,img):
         sliding_window = []
         img = cv2.resize(img,(200,200))
-        for window_size in [200,150,120,100,80,50,40,20]:
-            for x in range(self.size):
-                for y in range(self.size):
-                    if x+window_size<200 and y+window_size<200:
-                        sliding_window.append( (np.copy(img[x:(x+window_size),y:(y+window_size)]),
-                                        x,y,window_size) )
+        display(img)
+        for window_size in [80,50,40]:
+            for x in range(int(400/window_size)):
+                for y in range(int(400/window_size)):
+                    xx = x*int(window_size/2)
+                    yy = y*int(window_size/2)
+                    if xx+window_size<200 and yy+window_size<200:
+                        sliding_window.append( (np.copy(img[xx:(xx+window_size),
+                                                        yy:(yy+window_size)]),
+                                        xx,yy,window_size) )
         return sliding_window
 
     def detect(self,img):
-        pass # This feature will not work at this moment
         coord = []
         sliding_window = self.get_sliding_window(img)
-        for patch,x,y,window_size in sliding_window:
+        for patch,x,y,window_size in tqdm(sliding_window):
             pred = self.predict(cv2.resize(patch,(self.size,self.size)))
             if pred >0:
                 coord.append((pred,(x,y) ,(x+window_size,y+window_size) ))
         coord.sort(key=lambda x: x[0])
-        coord.reverse()
-        ret = [(x[1],x[2]) for x in coord[:5]]
+        ret = [(x[1],x[2]) for x in coord[-2:]]
         return ret
 
 
@@ -251,13 +251,12 @@ if __name__ == '__main__':
 
     img_size = 17
 
-
     # Reading the dataset
     print("READING THE DATASET")
     list_file = glob.glob('FDDB-folds/*-ellipseList.txt')
     face = []
     non_face = []
-    for fold in list_file[:6]:
+    for fold in list_file[:5]:
         print(fold)
         ll = read_file(fold)
         a, b = create_face_dataset(ll,img_size)
@@ -271,24 +270,29 @@ if __name__ == '__main__':
         Y[i] = 1
     for i in range(len(non_face)):
         X[i+len(face)] = compute_integral_image(non_face[i])
+
         Y[i+len(face)] = 0
 
 
     print('Raw data',X.shape,Y.shape)
     print('Face {} vs Non-face {}'.format(np.count_nonzero(Y==1),np.count_nonzero(Y==0)))
 
-
     # Init the model
 
     vl = ViolaJone(img_size)
     # Prepare the data for training
     try:
-        feature_matrix = np.load('feature_matrix.npy')
+        feature_matrix = np.load('old_feature_matrix.npy')
     except:
         feature_matrix = vl.compute_feature(X)
-        np.save('feature_matrix.npy', feature_matrix)
+        np.save('old_feature_matrix.npy', feature_matrix)
     X = feature_matrix
     print('feature matrix raw',X.shape)
+
+    # Select 5/6 of all data
+    X = X[:int(2*X.shape[0]/3)]
+    Y = Y[:int(2*Y.shape[0]/3)]
+    print('Face {} vs Non-face {}'.format(np.count_nonzero(Y == 1), np.count_nonzero(Y == 0)))
 
     # Implement feature selection
     try:
@@ -302,4 +306,4 @@ if __name__ == '__main__':
     vl.choose_feature_w_mask(feature_mask)
     print("Training the viola jones model")
     vl.fit(X,Y)
-    vl.save()
+    vl.save('trained_20')

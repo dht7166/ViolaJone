@@ -44,7 +44,7 @@ def resize(img,elip_coord,W,H):
     center,axes,angle = elip_coord
     axes = (int(axes[0] * W /oW), int(axes[1] * H /oH))
     center = (int(center[0] * W /oW), int(center[1] * H /oH))
-    img = cv2.resize(img,(W,H))
+    img =cv2.resize(img,(W,H))
     return img,(axes,center,angle)
 
 
@@ -65,13 +65,13 @@ def compute_feature_using_integral(S,feature):
         S = S.astype(int)
         t,l = region[0]
         b,r = region[1]
-        if t > 0 and l > 0:
+        if t>0 and l >0:
             return S[b,r]-S[t-1,r]-S[b,l-1]+S[t-1,l-1]
-        if t == 0 and l > 0:
+        if t == 0 and l >0:
             return S[b,r]-S[b,l-1]
-        if t > 0 and l == 0:
+        if t>0 and l == 0:
             return S[b,r] - S[t-1,r]
-        if t == 0 and l == 0:
+        if t==0 and l ==0:
             return S[b][r]
     pos,neg = feature
     rpos = sum([calc(S,region) for region in pos])
@@ -109,20 +109,29 @@ def create_face_dataset(all_coord,img_size):
             tl,br = convert_ellipse_to_rect(axes,center,angle)
             img[tl[1]:br[1], tl[0]:br[0]] = 0
 
-        img = cv2.resize(img,(2*img_size,2*img_size)) # Add 2 images to non-face, which is surely non face
-        Y.append(img[0:img_size,0:img_size])
-        Y.append(img[img_size:2*img_size, 0:img_size])
+        img = cv2.resize(img,(10*img_size,10*img_size))
+        for i in range(6):
+            start = i*img_size
+            end = start+img_size
+            Y.append(img[start:end,start:end])
     return X,Y
 
 if __name__ == '__main__':
-    center,axes,angle = read_elip_coord('41.936870 27.064477 1.471906 184.070915 129.345601  1')
-    image = 'originalPics/2002/08/31/big/img_17676.jpg'
-    img = read(image)
-    img, elip = resize(img,(axes,center,angle),200,200)
-    axes,center,angle = elip
-    print(axes,center,angle)
-    img = cv2.ellipse(img, center, axes, angle, 0, 360, (0, 0, 255))
-    tl, br = convert_ellipse_to_rect(center, axes, angle)
-    img = cv2.rectangle(img, tl, br, (0, 0, 255))
-    display(img)
-    print(tl,br)
+    # center,axes,angle = read_elip_coord('41.936870 27.064477 1.471906 184.070915 129.345601  1')
+    # image = 'originalPics/2002/08/31/big/img_17676.jpg'
+    # img = read(image)
+    # img, elip = resize(img,(axes,center,angle),200,200)
+    # axes,center,angle = elip
+    # print(axes,center,angle)
+    # img = cv2.ellipse(img, center, axes, angle, 0, 360, (0, 0, 255))
+    # tl, br = convert_ellipse_to_rect(center, axes, angle)
+    # img = cv2.rectangle(img, tl, br, (0, 0, 255))
+    # display(img)
+    # print(tl,br)
+    import glob
+    list_img = glob.glob('train/non-face/*.pgm')
+    list_img.reverse()
+    for img_name in list_img:
+        img = read(img_name)
+        img = cv2.resize(img,(100,100))
+        display(img)
