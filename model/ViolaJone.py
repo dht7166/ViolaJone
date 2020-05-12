@@ -35,7 +35,7 @@ class AdaBoost:
         Tp = 0
         Tn = 0
         for i in range(X.shape[0]):
-            if Y[i]==0:
+            if Y[i] == 0:
                 Tn+=W[i]
             else:
                 Tp+=W[i]
@@ -44,8 +44,8 @@ class AdaBoost:
         Sp = 0
         Sn = 0
         for i in range(X.shape[0]):
-            below_as_neg = Sp + (Tn-Sn)
-            below_as_pos = Sn + (Tp-Sp)
+            below_as_neg = Sp + (Tn - Sn)
+            below_as_pos = Sn + (Tp - Sp)
             if E > below_as_pos:
                 E = below_as_pos
                 P = 1
@@ -59,7 +59,7 @@ class AdaBoost:
             else:
                 Sp += W[i]
 
-        return E,P,thres
+        return E, P, thres
 
     def fit(self,X,Y,haar_feature):
         """
@@ -81,28 +81,28 @@ class AdaBoost:
         for num_classifier in range(self.T): # Choose only T weak classifier
             print("CHOOSING THE {}/{} WEAK CLASSIFIER".format(num_classifier+1,self.T),flush=True)
             # normalize weight
-            W = W/np.sum(W)
+            W = np.divide(W, np.sum(W))
 
             # select the best weak classifier
             best_E = 999999999
             best_weak_classifier = None
             for i in range(len(haar_feature)):
                 E,P,thres = self.weak_learner(X[:,i],Y,W)
-                if best_E>E:
+                if best_E > E:
                     best_E = E
                     best_weak_classifier = (i,haar_feature[i],P,thres)
 
             # Now we have best_weak_classifier
             Beta = best_E/(1-best_E)
             alpha = np.log(1/Beta)
-            i,feature, P, thres = best_weak_classifier
+            i, feature, P, thres = best_weak_classifier
             self.weak_clf.append((alpha,feature,P,thres))
             print("CHOSE WEAK CLASSIFIER {} with best error {:.3f} and weight {:.3f}".format(i,best_E,alpha))
             print("ADJUSTING WEIGHT")
             # now we adjust the W
             for i in range(Y.shape[0]):
-                j,feature,P,thres = best_weak_classifier
-                pred = 1 if P*X[i,j]<P*thres else 0
+                j, feature, P, thres = best_weak_classifier
+                pred = 1 if P*X[i,j] < P*thres else 0
                 e = 0 if pred == Y[i] else 1
                 W[i] = W[i]*Beta**(1-e)
 
@@ -139,27 +139,32 @@ class ViolaJone:
         for x,y in list_coord:
             for h in range(1,self.size):
                 for w in range(1,self.size):
-                    if x+h >=self.size or y+w>=self.size:
+                    if x+h >= self.size or y+w >= self.size:
                         continue
                     current = ((x,y),(x+h,y+w))
-                    if x+2*h<self.size:
+
+                    # 2 rectangle feature
+                    if x+2*h < self.size:
                         down = ((x+h,y),(x+2*h,y+w))
                         self.feature.append(([current],[down]))
                         self.feature.append(([down],[current]))
-                    if y+2*w<self.size:
+                    if y+2*w < self.size:
                         right = ((x,y+w),(x+h,y+2*w))
                         self.feature.append(([current],[right]))
                         self.feature.append(([right],[current]))
 
-                    if x+3*h<self.size:
+                    # 3 rectangle feature
+                    if x+3*h < self.size:
                         downdown = ((x+2*h,y),(x+3*h,y+w))
                         self.feature.append(([current,downdown],[down]))
                         self.feature.append(([down],[current,downdown]))
-                    if y+3*w<self.size:
+                    if y+3*w < self.size:
                         rightright = ((x,y+2*w),(x+h,y+3*w))
                         self.feature.append(([current, rightright], [right]))
                         self.feature.append(([right], [current, rightright]))
-                    if x+2*h<self.size and y+2*w<self.size:
+
+                    # 4 rectangle feature
+                    if x+2*h < self.size and y+2*w < self.size:
                         downright = ((x+h,y+w),(x+2*h,y+2*w))
                         self.feature.append(([current,downright],[right,down] ))
                         self.feature.append(([right,down],[current,downright]))
@@ -170,7 +175,7 @@ class ViolaJone:
             feature = self.feature[i]
             for j in range(X.shape[0]):
                 integral_img = X[j]
-                ret[i,j] =compute_feature_using_integral(integral_img,feature)
+                ret[i,j] = compute_feature_using_integral(integral_img,feature)
         return ret.transpose() # return a image x features matrix
 
     def prelim_feature_selection_sklearn(self,X,Y,k = 500):
