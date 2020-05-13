@@ -17,14 +17,15 @@ def test_overall_acc(img_size):
     X = np.zeros((len(face) + len(non_face), img_size, img_size))
     Y = np.zeros((len(face) + len(non_face)))
     for i in range(len(face)):
-        X[i] = face[i]
+        X[i] = compute_integral_image(face[i])
         Y[i] = 1
     for i in range(len(non_face)):
-        X[i + len(face)] = non_face[i]
+        X[i + len(face)] = compute_integral_image(non_face[i])
         Y[i + len(face)] = 0
     print('Face {} vs Non-face {}'.format(np.count_nonzero(Y == 1), np.count_nonzero(Y == 0)))
     model = ViolaJone(img_size)
-    model.load('trained_20')
+    model.load('../trained_20')
+    print(sum(x[0] for x in model.layer[0].weak_clf)/20)
     pred = np.zeros(Y.shape)
     for i in range(X.shape[0]):
         pred[i] =1 if  model.predict(X[i])>0 else 0
@@ -37,7 +38,7 @@ def test_overall_acc(img_size):
 def demo_predict(img_size):
     list_file = glob.glob('FDDB-folds/*-ellipseList.txt')
     model = ViolaJone(img_size)
-    model.load()
+    model.load('../trained_20')
     for fold in list_file[6:]:
         all_coord = read_file(fold)
         for img_name, list_coord in all_coord:
@@ -47,7 +48,7 @@ def demo_predict(img_size):
                 tl, br = convert_ellipse_to_rect(axes, center, angle)
                 crop = np.copy(img[tl[1]:br[1], tl[0]:br[0]])
                 display(crop)
-                print(model.predict(cv2.resize(crop, (img_size, img_size ))))
+                print(model.predict(compute_integral_image(cv2.resize(crop, (img_size, img_size )))))
 
 def demo_detect():
     list_img = glob.glob('test_images/*.jpg')

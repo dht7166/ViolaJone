@@ -4,6 +4,7 @@ from utils import *
 import glob
 from tqdm import tqdm
 from sklearn.feature_selection import VarianceThreshold, SelectKBest
+from sklearn.metrics import confusion_matrix
 import pickle
 import os
 
@@ -11,6 +12,7 @@ class AdaBoost:
     def __init__(self,num_feature = None):
         self.T = num_feature
         self.weak_clf = []
+        self.threshold = None
 
     def weak_learner(self, X, Y, W):
         """
@@ -107,24 +109,26 @@ class AdaBoost:
                 e = 0 if pred == Y[i] else 1
                 W[i] = W[i]*Beta**(1-e)
 
-    def save(self, name):
-        with open(name, 'wb') as f:
-            pickle.dump(self.weak_clf,f)
+        self.threshold = sum([x[0] for x in self.weak_clf])/2
 
-    def load(self, name):
-        with open(name,'rb') as f:
-            self.weak_clf = pickle.load(f)
-        self.T = len(self.weak_clf)
+    def decrease_threshold(self):
+        self.threshold-=0.01
 
     def predict(self, X):
         # of course X is a integral image
         sum_pred = 0
-        baseline = 0
         for alpha, feature, P, thres in self.weak_clf:
             sum_pred += alpha*(1 if P*compute_feature_using_integral(X,feature)<P*thres else 0)
-            baseline += alpha/2
-        return sum_pred-baseline
+        return sum_pred-self.threshold
 
+    def save(self, name):
+        with open(name, 'wb') as f:
+            pickle.dump((self.weak_clf,self.threshold), f)
+
+    def load(self, name):
+        with open(name, 'rb') as f:
+            self.weak_clf,self.threshold = pickle.load(f)
+        self.T = len(self.weak_clf)
 
 class ViolaJone:
     def __init__(self,size):
@@ -186,12 +190,61 @@ class ViolaJone:
                 features.append(self.feature[i])
         self.feature = features
 
-    def fit(self,X,Y):
+    def fit(self,X,Y,non_faces,valid_X,valid_Y):
+        """
+        :param X: The feature matrix of img x feature
+        :param Y: The true label
+        :param non_faces: The integral non_faces images in X
+        :param valid_X: The validation set, numpy array of integral images
+        :param valid_Y: The label for valid_X
+        :return:
+        """
         # We are assuming that compute feature is called by the user
-        # For now, add only one layer
-        ada = AdaBoost(20)
-        ada.fit(X,Y,self.feature)
-        self.layer.append(ada)
+        max_fp_rate = 0.4
+        min_detect_rate = 0.98
+        F_target = 0.02
+        P = X[Y==1]
+        N = X[Y==0]
+        F = [1.0]
+        D = [1.0]
+        i = 0
+        while F[i]>F_target:
+            print(i,P.shape,N.shape)
+            i=i+1
+            n = 5
+            F.append(F[i-1])
+            D.append(D[i-1])
+            while F[i]>max_fp_rate*F[i-1]:
+                if len(self.layer)>i:
+                    self.layer.pop()
+                n+=5
+                print(F[i], D[i])
+                print(i, n,end = "*****\n")
+                ada = AdaBoost(n)
+                train = np.vstack((P,N))
+                label = np.append(np.ones(P.shape[0]),np.zeros(N.shape[0]))
+                ada.fit(train,label,self.feature)
+                self.layer.append(ada)
+                # Eval on test
+                prediction = [self.predict(img) > 0 for img in valid_X]
+                tn, fp, fn, tp = confusion_matrix(valid_Y, prediction).ravel()
+                F[i] = fp / (tn + fp)
+                D[i] = tp / (tp + fn)
+                # adjust threshold
+                while D[i]<min_detect_rate*D[i-1]:
+                    self.layer[-1].decrease_threshold()
+                    prediction = [self.predict(img)>0 for img in valid_X]
+                    tn, fp, fn, tp = confusion_matrix(valid_Y,prediction).ravel()
+                    F[i] = fp/(tn+fp)
+                    D[i] = tp/(tp+fn)
+            if F[i]>F_target:
+                # Time to add only false images to N
+                pred = np.array([self.predict(x) for x in non_faces])
+                N = X[Y==0]
+                N = N[pred==1]
+
+
+
 
 
     def load(self,name):
@@ -207,20 +260,20 @@ class ViolaJone:
         for i,ada in enumerate(self.layer):
             ada.save(name+'/save_{}.pkl'.format(i))
 
-    def predict(self,X): # X has to be a proper resized image
-        X = compute_integral_image(X)
-        sum = 0
+    def predict(self,X):
+        """
+        :param X: An integral image
+        :return: The prediction if face or not (1 or 0)
+        """
         for ada in self.layer:
             pred = ada.predict(X)
             if pred<=0:
                 return 0
-            sum+=pred
-        return sum
+        return 1
 
     def get_sliding_window(self,img):
         sliding_window = []
         img = cv2.resize(img,(200,200))
-        display(img)
         for window_size in [80,50,40]:
             for x in range(int(400/window_size)):
                 for y in range(int(400/window_size)):
@@ -236,7 +289,9 @@ class ViolaJone:
         coord = []
         sliding_window = self.get_sliding_window(img)
         for patch,x,y,window_size in tqdm(sliding_window):
-            pred = self.predict(cv2.resize(patch,(self.size,self.size)))
+            patch = cv2.resize(patch,(self.size,self.size))
+            patch = compute_integral_image(patch)
+            pred = self.predict(patch)
             if pred >0:
                 coord.append((pred,(x,y) ,(x+window_size,y+window_size) ))
         coord.sort(key=lambda x: x[0])
@@ -272,38 +327,53 @@ if __name__ == '__main__':
         X[i+len(face)] = compute_integral_image(non_face[i])
 
         Y[i+len(face)] = 0
-
-
+    non_face_training = X[Y == 0]
     print('Raw data',X.shape,Y.shape)
     print('Face {} vs Non-face {}'.format(np.count_nonzero(Y==1),np.count_nonzero(Y==0)))
 
-    # Init the model
 
+    print("PREPARING THE VALIDATION MATRIX")
+    face = []
+    non_face = []
+    for fold in list_file[5:]:
+        print(fold)
+        ll = read_file(fold)
+        a, b = create_face_dataset(ll, img_size)
+        face.extend(a)
+        non_face.extend(b)
+    valid_X = np.zeros((len(face) + len(non_face), img_size, img_size))
+    valid_Y = np.zeros((len(face) + len(non_face)))
+    for i in range(len(face)):
+        valid_X[i] = compute_integral_image(face[i])
+        valid_Y[i] = 1
+    for i in range(len(non_face)):
+        valid_X[i + len(face)] = compute_integral_image(non_face[i])
+        valid_Y[i + len(face)] = 0
+    print('VALIDATION Face {} vs Non-face {}'.format(np.count_nonzero(valid_Y==1),np.count_nonzero(valid_Y==0)))
+
+    # Init the model
     vl = ViolaJone(img_size)
     # Prepare the data for training
     try:
-        feature_matrix = np.load('old_feature_matrix.npy')
+        feature_matrix = np.load('../old_feature_matrix.npy')
     except:
         feature_matrix = vl.compute_feature(X)
-        np.save('old_feature_matrix.npy', feature_matrix)
+        np.save('../old_feature_matrix.npy', feature_matrix)
     X = feature_matrix
-    print('feature matrix raw',X.shape)
-
-    # Select 5/6 of all data
-    X = X[:int(2*X.shape[0]/3)]
-    Y = Y[:int(2*Y.shape[0]/3)]
-    print('Face {} vs Non-face {}'.format(np.count_nonzero(Y == 1), np.count_nonzero(Y == 0)))
+    print('feature matrix raw', X.shape)
 
     # Implement feature selection
     try:
-        feature_mask = np.load('prelim_feature_mask.npy')
+        feature_mask = np.load('../prelim_feature_mask.npy')
         X = X[:,feature_mask]
     except:
         feature_mask, X = vl.prelim_feature_selection_sklearn(X, Y,5000)
-        np.save('prelim_feature_mask.npy', feature_mask)
+        np.save('../prelim_feature_mask.npy', feature_mask)
 
     print('prelim feature selection',X.shape)
     vl.choose_feature_w_mask(feature_mask)
+
+
     print("Training the viola jones model")
-    vl.fit(X,Y)
-    vl.save('trained_20')
+    vl.fit(X,Y,non_face_training,valid_X,valid_Y)
+    vl.save('../trained_cascade')
