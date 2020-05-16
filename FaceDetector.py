@@ -122,7 +122,7 @@ def create_face_dataset(all_coord,img_size):
             Y.append(img[start:end,start:end])
     return X,Y
 
-def generate_json(list_img,output_dir):
+def generate_json(list_img):
     json_list = [] #each element is a dictionary, {"iname": "1.jpg", "bbox": [1, 2, 3 ,5]}
 
     # initialize model
@@ -138,7 +138,7 @@ def generate_json(list_img,output_dir):
             json_list.append(element)
 
     #the result json file name
-    output_json = os.path.join(output_dir,"results.json")
+    output_json = "results.json"
 
     #dump json_list to result.json
     with open(output_json, 'w') as f:
@@ -443,7 +443,7 @@ class ViolaJone:
 def main():
     directory = sys.argv[1]
     list_img= glob.glob(os.path.join(directory,'*.jpg'))
-    generate_json(list_img,directory)
+    generate_json(list_img)
 
     
 
