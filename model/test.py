@@ -24,8 +24,7 @@ def test_overall_acc(img_size):
         Y[i + len(face)] = 0
     print('Face {} vs Non-face {}'.format(np.count_nonzero(Y == 1), np.count_nonzero(Y == 0)))
     model = ViolaJone(img_size)
-    model.load('../trained_20')
-    print(sum(x[0] for x in model.layer[0].weak_clf)/20)
+    model.load('../trained_cascade_low_fp')
     pred = np.zeros(Y.shape)
     for i in range(X.shape[0]):
         pred[i] =1 if  model.predict(X[i])>0 else 0
@@ -34,6 +33,8 @@ def test_overall_acc(img_size):
     print(np.sum(pred == Y) / X.shape[0])
     tn, fp, fn, tp = confusion_matrix(Y,pred).ravel()
     print(tn,fp,fn,tp)
+    print(fp/(tn+fp))
+    print(tp/(tp+fn))
 
 def demo_predict(img_size):
     list_file = glob.glob('FDDB-folds/*-ellipseList.txt')
@@ -51,22 +52,19 @@ def demo_predict(img_size):
                 print(model.predict(compute_integral_image(cv2.resize(crop, (img_size, img_size )))))
 
 def demo_detect():
-    list_img = glob.glob('test_images/*.jpg')
+    list_img = glob.glob('../test_images/*.jpg')
     model = ViolaJone(17)
-    model.load('trained_10')
-    for feature in model.layer[0].weak_clf:
-        print(feature)
+    model.load('../trained_cascade_low_fp')
     for image in list_img:
         img = read(image)
         coord = model.detect(img)
         color = cv2.imread(image)
-        color = cv2.resize(color,(200,200))
         for tl,br in coord:
             cv2.rectangle(color,tl,br,(0, 0, 255))
         display(color)
 
 
 if __name__=='__main__':
-    test_overall_acc(17)
+    # test_overall_acc(17)
     # demo_predict(17)
-    # demo_detect()
+    demo_detect()

@@ -8,6 +8,7 @@ from sklearn.metrics import confusion_matrix
 import pickle
 import os
 import json
+import sys
 
 
 def read(name): # default to read gray scale image
@@ -52,6 +53,9 @@ def resize(img,elip_coord,W,H):
     center = (int(center[0] * W /oW), int(center[1] * H /oH))
     img =cv2.resize(img,(W,H))
     return img,(axes,center,angle)
+
+def normalize(img):
+    return (img-img.mean())/(img.std()+1e-7)
 
 def compute_integral_image(img):
     S = img
@@ -118,24 +122,23 @@ def create_face_dataset(all_coord,img_size):
             Y.append(img[start:end,start:end])
     return X,Y
 
-def generate_json():
+def generate_json(list_img,output_dir):
     json_list = [] #each element is a dictionary, {"iname": "1.jpg", "bbox": [1, 2, 3 ,5]}
-    list_img = glob.glob('test_images/*.jpg')
 
     # initialize model
     model = ViolaJone(17)
-    model.load('trained_10')
+    model.load('trained_cascade_low_fp')
 
-    for image in list_img:
+    for image in tqdm(list_img):
         iname = os.path.basename(image)
         img = read(image)
         coord = model.detect(img)
-        for c, r, c_w, r_w in coord:
+        for (c, r), (c_w, r_w) in coord:
             element = {"iname": iname, "bbox": [c, r, c_w, r_w]}
             json_list.append(element)
 
     #the result json file name
-    output_json = "results.json"
+    output_json = os.path.join(output_dir,"results.json")
 
     #dump json_list to result.json
     with open(output_json, 'w') as f:
@@ -312,7 +315,8 @@ class ViolaJone:
                 ret[i,j] =compute_feature_using_integral(integral_img,feature)
         return ret.transpose() # return a image x features matrix
 
-    def prelim_feature_selection_sklearn(self,X,Y,k = 5000):
+    def prelim_feature_selection_sklearn(self,X,Y,k = 500):
+        # f_sel = VarianceThreshold(threshold=(.8 * (1 - .8)))
         f_sel = SelectKBest(k = k)
         f_sel.fit(X,Y)
         return f_sel.get_support(),f_sel.transform(X)
@@ -334,48 +338,56 @@ class ViolaJone:
         :return:
         """
         # We are assuming that compute feature is called by the user
-        max_fp_rate = 0.4
-        min_detect_rate = 0.98
-        F_target = 0.02
+        max_fp_rate = 0.2
+        min_detect_rate = 0.9
+        F_target = 0.001
         P = X[Y==1]
         N = X[Y==0]
         F = [1.0]
         D = [1.0]
         i = 0
-        while F[i]>F_target:
+        while F[i]>F_target and len(self.layer)<5:
             print(i,P.shape,N.shape)
             i=i+1
-            n = 5
+            n = 0
             F.append(F[i-1])
             D.append(D[i-1])
-            while F[i]>max_fp_rate*F[i-1]:
+            while F[i]>max_fp_rate*F[i-1] and n<=0:
                 if len(self.layer)>i:
                     self.layer.pop()
-                n+=5
+                n+=10*i
                 print(F[i], D[i])
-                print(i, n,end = "*****\n")
+                print(i, n,len(self.layer),end = "*****\n")
                 ada = AdaBoost(n)
                 train = np.vstack((P,N))
                 label = np.append(np.ones(P.shape[0]),np.zeros(N.shape[0]))
                 ada.fit(train,label,self.feature)
                 self.layer.append(ada)
-                # Eval on test
-                prediction = [self.predict(img) > 0 for img in valid_X]
-                tn, fp, fn, tp = confusion_matrix(valid_Y, prediction).ravel()
-                F[i] = fp / (tn + fp)
-                D[i] = tp / (tp + fn)
-                # adjust threshold
-                while D[i]<min_detect_rate*D[i-1]:
-                    self.layer[-1].decrease_threshold()
-                    prediction = [self.predict(img)>0 for img in valid_X]
-                    tn, fp, fn, tp = confusion_matrix(valid_Y,prediction).ravel()
-                    F[i] = fp/(tn+fp)
-                    D[i] = tp/(tp+fn)
+
+                l_thres = 0
+                r_thres = ada.threshold
+                while r_thres>l_thres+0.001:
+                    ada.threshold = (l_thres+r_thres)/2
+                    # Eval on test
+                    prediction = [self.predict(img) > 0 for img in valid_X]
+                    tn, fp, fn, tp = confusion_matrix(valid_Y, prediction).ravel()
+                    F[i] = fp / (tn + fp)
+                    D[i] = tp / (tp + fn)
+                    if D[i] < min_detect_rate*D[i-1]:
+                        r_thres = ada.threshold
+                    else:
+                        l_thres = ada.threshold
             if F[i]>F_target:
                 # Time to add only false images to N
                 pred = np.array([self.predict(x) for x in non_faces])
                 N = X[Y==0]
                 N = N[pred==1]
+
+        print("FINAL F {} D {}".format(F[-1],D[-1]))
+
+
+
+
 
     def load(self,name):
         list_ada = glob.glob(name+'/save_*.pkl')
@@ -403,13 +415,13 @@ class ViolaJone:
 
     def get_sliding_window(self,img):
         sliding_window = []
-        img = cv2.resize(img,(200,200))
-        for window_size in [80,50,40]:
-            for x in range(int(400/window_size)):
-                for y in range(int(400/window_size)):
+        H,W = img.shape
+        for window_size in [1000,900,800,650,500,400,300,200,100,50]:
+            for x in range(int(2*H/window_size)):
+                for y in range(int(2*W/window_size)):
                     xx = x*int(window_size/2)
                     yy = y*int(window_size/2)
-                    if xx+window_size<200 and yy+window_size<200:
+                    if xx+window_size<H and yy+window_size<W:
                         sliding_window.append( (np.copy(img[xx:(xx+window_size),
                                                         yy:(yy+window_size)]),
                                         xx,yy,window_size) )
@@ -418,16 +430,21 @@ class ViolaJone:
     def detect(self,img):
         coord = []
         sliding_window = self.get_sliding_window(img)
-        for patch,x,y,window_size in tqdm(sliding_window):
+        for patch,x,y,window_size in sliding_window:
             patch = cv2.resize(patch,(self.size,self.size))
+            patch = normalize(patch)
             patch = compute_integral_image(patch)
             pred = self.predict(patch)
-            if pred > 0:
-                coord.append((x,y,x+window_size,y+window_size))
+            if pred >0:
+                coord.append(((y,x) ,(window_size,window_size) ))
         return coord
 
 
 def main():
+    directory = sys.argv[1]
+    list_img= glob.glob(os.path.join(directory,'*.jpg'))
+    generate_json(list_img,directory)
+
     
 
 

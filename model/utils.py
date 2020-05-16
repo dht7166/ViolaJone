@@ -92,6 +92,9 @@ def read_file(name):
     return all_coord
 
 
+def normalize(img):
+    return (img-img.mean())/(img.std()+1e-7)
+
 def create_face_dataset(all_coord,img_size):
     X = [] # face
     Y = [] # non-face
@@ -103,7 +106,7 @@ def create_face_dataset(all_coord,img_size):
             tl,br = convert_ellipse_to_rect(axes,center,angle)
             crop =np.copy(img[tl[1]:br[1],tl[0]:br[0]])
             crop = cv2.resize(crop,(img_size,img_size))
-            X.append(crop)
+            X.append(normalize(crop))
         for coord in list_coord:  # Remove the faces
             axes,center,angle = coord
             tl,br = convert_ellipse_to_rect(axes,center,angle)
@@ -113,7 +116,8 @@ def create_face_dataset(all_coord,img_size):
         for i in range(6):
             start = i*img_size
             end = start+img_size
-            Y.append(img[start:end,start:end])
+            crop = np.copy(img[start:end,start:end])
+            Y.append(normalize(crop))
     return X,Y
 
 if __name__ == '__main__':

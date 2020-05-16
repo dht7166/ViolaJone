@@ -90,7 +90,7 @@ class AdaBoost:
             # select the best weak classifier
             best_E = 999999999
             best_weak_classifier = None
-            for i in tqdm(range(len(haar_feature))):
+            for i in range(len(haar_feature)):
                 E,P,thres = self.weak_learner(X[:,i],Y,W)
                 if best_E>E:
                     best_E = E
@@ -119,7 +119,7 @@ class AdaBoost:
         sum_pred = 0
         for alpha, feature, P, thres in self.weak_clf:
             sum_pred += alpha*(1 if P*compute_feature_using_integral(X,feature)<P*thres else 0)
-        return sum_pred-self.threshold
+        return 1 if sum_pred>self.threshold else 0
 
     def save(self, name):
         with open(name, 'wb') as f:
@@ -200,48 +200,52 @@ class ViolaJone:
         :return:
         """
         # We are assuming that compute feature is called by the user
-        max_fp_rate = 0.4
-        min_detect_rate = 0.98
-        F_target = 0.02
+        max_fp_rate = 0.2
+        min_detect_rate = 0.9
+        F_target = 0.001
         P = X[Y==1]
         N = X[Y==0]
         F = [1.0]
         D = [1.0]
         i = 0
-        while F[i]>F_target:
+        while F[i]>F_target and len(self.layer)<5:
             print(i,P.shape,N.shape)
             i=i+1
-            n = 5
+            n = 0
             F.append(F[i-1])
             D.append(D[i-1])
-            while F[i]>max_fp_rate*F[i-1]:
+            while F[i]>max_fp_rate*F[i-1] and n<=0:
                 if len(self.layer)>i:
                     self.layer.pop()
-                n+=5
+                n+=10*i
                 print(F[i], D[i])
-                print(i, n,end = "*****\n")
+                print(i, n,len(self.layer),end = "*****\n")
                 ada = AdaBoost(n)
                 train = np.vstack((P,N))
                 label = np.append(np.ones(P.shape[0]),np.zeros(N.shape[0]))
                 ada.fit(train,label,self.feature)
                 self.layer.append(ada)
-                # Eval on test
-                prediction = [self.predict(img) > 0 for img in valid_X]
-                tn, fp, fn, tp = confusion_matrix(valid_Y, prediction).ravel()
-                F[i] = fp / (tn + fp)
-                D[i] = tp / (tp + fn)
-                # adjust threshold
-                while D[i]<min_detect_rate*D[i-1]:
-                    self.layer[-1].decrease_threshold()
-                    prediction = [self.predict(img)>0 for img in valid_X]
-                    tn, fp, fn, tp = confusion_matrix(valid_Y,prediction).ravel()
-                    F[i] = fp/(tn+fp)
-                    D[i] = tp/(tp+fn)
+
+                l_thres = 0
+                r_thres = ada.threshold
+                while r_thres>l_thres+0.001:
+                    ada.threshold = (l_thres+r_thres)/2
+                    # Eval on test
+                    prediction = [self.predict(img) > 0 for img in valid_X]
+                    tn, fp, fn, tp = confusion_matrix(valid_Y, prediction).ravel()
+                    F[i] = fp / (tn + fp)
+                    D[i] = tp / (tp + fn)
+                    if D[i] < min_detect_rate*D[i-1]:
+                        r_thres = ada.threshold
+                    else:
+                        l_thres = ada.threshold
             if F[i]>F_target:
                 # Time to add only false images to N
                 pred = np.array([self.predict(x) for x in non_faces])
                 N = X[Y==0]
                 N = N[pred==1]
+
+        print("FINAL F {} D {}".format(F[-1],D[-1]))
 
 
 
@@ -273,13 +277,14 @@ class ViolaJone:
 
     def get_sliding_window(self,img):
         sliding_window = []
-        img = cv2.resize(img,(200,200))
-        for window_size in [80,50,40]:
-            for x in range(int(400/window_size)):
-                for y in range(int(400/window_size)):
+        H,W = img.shape
+        print(H,W)
+        for window_size in [1000,900,800,650,500,400,300,200,100,50]:
+            for x in range(int(2*H/window_size)):
+                for y in range(int(2*W/window_size)):
                     xx = x*int(window_size/2)
                     yy = y*int(window_size/2)
-                    if xx+window_size<200 and yy+window_size<200:
+                    if xx+window_size<H and yy+window_size<W:
                         sliding_window.append( (np.copy(img[xx:(xx+window_size),
                                                         yy:(yy+window_size)]),
                                         xx,yy,window_size) )
@@ -290,13 +295,12 @@ class ViolaJone:
         sliding_window = self.get_sliding_window(img)
         for patch,x,y,window_size in tqdm(sliding_window):
             patch = cv2.resize(patch,(self.size,self.size))
+            patch = normalize(patch)
             patch = compute_integral_image(patch)
             pred = self.predict(patch)
             if pred >0:
-                coord.append((pred,(x,y) ,(x+window_size,y+window_size) ))
-        coord.sort(key=lambda x: x[0])
-        ret = [(x[1],x[2]) for x in coord[-2:]]
-        return ret
+                coord.append(((y,x) ,(y+window_size,x+window_size) ))
+        return coord
 
 
 
@@ -376,4 +380,4 @@ if __name__ == '__main__':
 
     print("Training the viola jones model")
     vl.fit(X,Y,non_face_training,valid_X,valid_Y)
-    vl.save('../trained_cascade')
+    vl.save('../trained_cascade_low_fp')
