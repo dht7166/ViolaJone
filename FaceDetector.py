@@ -127,7 +127,7 @@ def generate_json(list_img,output_dir):
 
     # initialize model
     model = ViolaJone(17)
-    model.load('trained_cascade_low_fp')
+    model.load('Model_Files/trained_cascade_low_fp')
 
     for image in tqdm(list_img):
         iname = os.path.basename(image)
